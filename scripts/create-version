@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+
+const semver = require('semver')
+const path = require('path')
+const fs = require('fs')
+const {execSync} = require('child_process')
+
+const dockerFileLocation = path.join(__dirname, '..', 'Dockerfile')
+
+function getDockerfile (version) {
+  return `FROM docker:${version}
+RUN apk add --no-cache bash
+CMD ["bash"]
+`
+}
+
+function createVersion (version, tags) {
+  // Write Dockerfile
+  fs.writeFileSync(dockerFileLocation, getDockerfile(version))
+
+  // Commit
+  execSync('git add Dockerfile')
+  execSync(`git commit -m v${version}`)
+
+  // Tag
+  tags.forEach(tag => {
+    try {
+      execSync(`git tag -d ${tag}`)
+    } catch (e) {}
+
+    try {
+      execSync(`git push origin :refs/tags/${tag}`)
+    } catch (e) {}
+
+    execSync(`git tag ${tag}`)
+  })
+}
+
+const version = semver.clean(process.argv[2])
+
+if (!semver.valid(version)) {
+  throw new Error(`Specified version ${version} is not a SemVer valid version.`)
+}
+
+createVersion(version + '-dind', [
+  version + '-dind',
+  semver.major(version) + '.' + semver.minor(version) + '-dind',
+  semver.major(version) + '-dind'
+])
+
+createVersion(version, [
+  version,
+  semver.major(version) + '.' + semver.minor(version),
+  semver.major(version)
+])
